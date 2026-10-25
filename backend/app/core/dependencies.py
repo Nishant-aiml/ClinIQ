@@ -98,6 +98,27 @@ async def get_current_user(
     return payload
 
 
+async def get_optional_current_user(
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(_bearer_scheme),
+    ],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> dict[str, object] | None:
+    """Return decoded JWT payload if valid token present, otherwise None without raising 401."""
+    if credentials is None:
+        return None
+    from app.core.security import decode_access_token
+    from jose import JWTError
+    try:
+        payload = decode_access_token(credentials.credentials, settings.SECRET_KEY)
+        if payload.get("sub") is not None:
+            return payload
+    except Exception:
+        pass
+    return None
+
+
 # ─── Type aliases for injection ───────────────────────────────────────────────
 
 CurrentUser  = Annotated[dict[str, object], Depends(get_current_user)]

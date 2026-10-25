@@ -15,6 +15,7 @@ from sqlalchemy import Boolean, Date, DateTime, String, Text, Enum as SAEnum, Fo
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base, TimestampMixin
+from app.modules.auth.model import User  # noqa: F401
 
 
 class Patient(Base, TimestampMixin):
