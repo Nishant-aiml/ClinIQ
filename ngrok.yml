@@ -1,0 +1,12 @@
+version: "3"
+agent:
+  authtoken: 3HItQtQFOj7emtEarLlTIfj0wI5_7HqV9eQ9243daSU3JKTKt
+  web_addr: 127.0.0.1:4056
+
+tunnels:
+  cliniq:
+    proto: http
+    addr: 3056
+    inspect: true
+    # Uncomment to use your static domain:
+    # domain: charging-lend-scoff.ngrok-free.dev

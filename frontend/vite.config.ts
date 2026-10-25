@@ -14,8 +14,26 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    port: 3056,
     strictPort: true,
     host: true,
+    allowedHosts: ['charging-lend-scoff.ngrok-free.dev', '.ngrok-free.app', '.ngrok.io', 'all'],
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8056',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/docs': {
+        target: 'http://127.0.0.1:8056',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/openapi.json': {
+        target: 'http://127.0.0.1:8056',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
 });
