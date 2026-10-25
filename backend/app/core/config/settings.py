@@ -14,9 +14,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(..., description="Secret key for JWT")
     DATABASE_URL: str = Field(..., description="Database connection string")
     SARVAM_API_KEY: Optional[str] = None
-    OPENAI_API_KEY: Optional[str] = None
+    GLM_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None   # retained for config compatibility
     CORS_ORIGINS: List[str] = ["*"]
-
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

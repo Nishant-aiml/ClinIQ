@@ -50,19 +50,27 @@ class QueryRouter:
     def classify_query(cls, query_text: str) -> QueryIntent:
         q_lower = query_text.strip().lower()
 
-        # 1. General Medical Knowledge queries (e.g. "What is metformin used for?")
-        if (
-            re.search(r"(?i)\bwhat is\s+[a-z0-9]+\s+(used for|indicated for|prescribed for)\b", query_text)
-            or re.search(r"(?i)\bexplain\s+(the\s+)?(use|side effects|mechanism)\s+of\b", query_text)
-        ):
-            med_m = re.search(r"(?i)\b(metformin|paracetamol|dolo|amlodipine|atorvastatin|pantoprazole|aspirin)\b", query_text)
+        # 1. General Medical Knowledge queries (e.g. "What is metformin used for?", "what is the mechanism of metformin?")
+        general_med_match = re.search(
+            r"(?i)\b(what is\s+(the\s+)?(mechanism|use|indication|dosage|side effects?|contraindication)s?\s+of|"
+            r"what is\s+[a-z0-9-]+\s*(used for|indicated for|prescribed for|\?)?|"
+            r"explain\s+(the\s+)?(use|side effects?|mechanism|action)\s+of|"
+            r"mechanism\s+of\s+action\s+of|"
+            r"what are\s+(the\s+)?(symptoms|causes|treatments|side effects?)\s+of)\b",
+            query_text,
+        )
+        if general_med_match:
+            med_m = re.search(r"(?i)\b(metformin|paracetamol|dolo|amlodipine|atorvastatin|pantoprazole|aspirin|insulin|lisinopril|ibuprofen|amoxicillin|azithromycin|omeprazole)\b", query_text)
             target_med = med_m.group(1) if med_m else None
-            return QueryIntent(
-                intent_type="GENERAL_MEDICAL_INFORMATION",
-                retrieval_pathway="GENERAL",
-                target_medicine=target_med,
-                is_general_info=True,
-            )
+            # Only route to general medical knowledge if no specific patient identifier is in query
+            has_patient_id = bool(re.search(r"\bMRN-[A-Za-z0-9-]+\b", query_text, re.IGNORECASE))
+            if not has_patient_id:
+                return QueryIntent(
+                    intent_type="GENERAL_MEDICAL_INFORMATION",
+                    retrieval_pathway="GENERAL",
+                    target_medicine=target_med,
+                    is_general_info=True,
+                )
 
         # 2. Patient Summary queries (single name keyword, "summary", "overview", "tell me about", short name input)
         words = q_lower.split()

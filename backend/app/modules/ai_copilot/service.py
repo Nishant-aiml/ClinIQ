@@ -65,7 +65,12 @@ class AICopilotService:
                 confidence="INSUFFICIENT",
             )
 
-        # STAGE 2: Patient Resolution & Ownership Check
+        # STAGE 2: Intent Classification & General Knowledge Routing
+        intent = QueryRouter.classify_query(clean_message)
+        if intent.is_general_info:
+            return await self._handle_general_medical_info(clean_message, intent.target_medicine)
+
+        # STAGE 3: Patient Resolution & Ownership Check
         resolution = await self._patient_resolver.resolve_patient(
             query_text=clean_message,
             clinician_id=clinician_id,
@@ -91,11 +96,6 @@ class AICopilotService:
                 ambiguous_candidates=cands,
             )
 
-        # Handle General Medical Knowledge query without patient context
-        intent = QueryRouter.classify_query(clean_message)
-        if intent.is_general_info:
-            return await self._handle_general_medical_info(clean_message, intent.target_medicine)
-
         # If query requires patient context but patient was not found
         if resolution.status != "RESOLVED" or not resolution.patient:
             return AICopilotChatResponse(
@@ -106,6 +106,7 @@ class AICopilotService:
             )
 
         patient = resolution.patient
+        effective_clinician_id = patient.clinician_id or clinician_id
 
         # STAGE 3 & 4: Intent Classification & Query Decomposition
         _log.info("RAG.PIPELINE.INTENT", intent=intent.intent_type, pathway=intent.retrieval_pathway, patient_id=patient.id)
@@ -116,7 +117,7 @@ class AICopilotService:
         confidence_level = "HIGH"
 
         if intent.retrieval_pathway == "STRUCTURED":
-            evidence_obj = await self._execute_structured_retrieval(patient.id, clinician_id, intent)
+            evidence_obj = await self._execute_structured_retrieval(patient.id, effective_clinician_id, intent)
             evidence_text = evidence_obj.evidence_summary
             confidence_level = evidence_obj.confidence_level
             sources = [SourceAttribution(**s) for s in evidence_obj.source_records]
@@ -124,7 +125,7 @@ class AICopilotService:
         elif intent.retrieval_pathway == "UNSTRUCTURED":
             # STAGE 7 & 8: BM25 + Vector Search + Reciprocal Rank Fusion (RRF) & Reranking
             unstructured_chunks = await self._unstructured_retriever.retrieve_unstructured_chunks(
-                query=clean_message, patient_id=patient.id, clinician_id=clinician_id, top_k=4
+                query=clean_message, patient_id=patient.id, clinician_id=effective_clinician_id, top_k=4
             )
             
             if not unstructured_chunks:
@@ -147,7 +148,7 @@ class AICopilotService:
 
         else:
             # HYBRID PATHWAY
-            st_obj = await self._structured_retriever.retrieve_patient_summary(patient.id, clinician_id)
+            st_obj = await self._structured_retriever.retrieve_patient_summary(patient.id, effective_clinician_id)
             sources = [SourceAttribution(**s) for s in st_obj.source_records]
 
             # For short name queries (patient lookups), use only compact structured evidence.
@@ -157,7 +158,7 @@ class AICopilotService:
                 evidence_text = st_obj.evidence_summary
             else:
                 un_chunks = await self._unstructured_retriever.retrieve_unstructured_chunks(
-                    query=clean_message, patient_id=patient.id, clinician_id=clinician_id, top_k=2
+                    query=clean_message, patient_id=patient.id, clinician_id=effective_clinician_id, top_k=2
                 )
                 doc_ctx = "\n".join([c[0].text_content for c in un_chunks])
                 evidence_text = f"STRUCTURED SUMMARY:\n{st_obj.evidence_summary}\n\nDOCUMENT CONTEXT:\n{doc_ctx}"
@@ -200,7 +201,7 @@ class AICopilotService:
             _log.error("RAG.PIPELINE.GENERATION_ERROR", error=str(exc))
             return AICopilotChatResponse(
                 success=False,
-                answer=f"AI Copilot is unavailable because the OpenAI API is not configured or reachable. ({str(exc)})",
+                answer=f"AI Copilot is unavailable because the AI service is not configured or reachable. ({str(exc)})",
                 confidence="INSUFFICIENT",
             )
 
@@ -286,7 +287,7 @@ class AICopilotService:
             )
             formatted_answer = f"**General Medical Information** (Not specific to any patient's record):\n\n{answer}"
         except Exception as exc:
-            formatted_answer = f"**General Medical Information**:\n\n{query_text}\n\n*Note: OpenAI API is currently unconfigured or unreachable.*"
+            formatted_answer = f"**General Medical Information**:\n\n{query_text}\n\n*Note: AI Copilot service is currently unavailable ({str(exc)}).*"
 
         return AICopilotChatResponse(
             success=True,

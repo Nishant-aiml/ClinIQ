@@ -8,5 +8,4 @@ tunnels:
     proto: http
     addr: 3056
     inspect: true
-    # Uncomment to use your static domain:
-    # domain: charging-lend-scoff.ngrok-free.dev
+    domain: charging-lend-scoff.ngrok-free.dev

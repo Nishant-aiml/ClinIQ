@@ -15,6 +15,7 @@ from app.core.config.settings import get_settings
 from app.ai.context_builder.patient_context import PatientContextSnapshot
 from app.ai.guardrails.safety_guard import SafetyGuardrails
 from app.ai.retrievers.hybrid_retriever import ScoredChunk
+from app.ai.llm.openai_client import GPT5NanoClient
 from app.observability.logger import get_logger
 
 _log = get_logger(__name__)
@@ -108,40 +109,27 @@ class GPTNanoReasoningEngine:
         context_str = "\n\n".join(context_blocks)
         full_answer = None
 
-        # 1. Try Live OpenAI API if OPENAI_API_KEY is configured
-        if openai_key and openai_key.startswith("sk-"):
-            try:
-                system_prompt = (
-                    "You are ClinIQ's GPT-5 Nano Clinical Decision Support AI.\n"
-                    "Your responses MUST be strictly grounded in the provided patient records and retrieved clinical context.\n"
-                    "Be concise, evidence-based, professional, and clear. Cite specific lab values, document filenames, and vitals."
-                )
-                user_prompt = (
-                    f"PATIENT CONTEXT:\n{patient_snapshot.patient_summary_text[:1500]}\n\n"
-                    f"RETRIEVED CLINICAL CONTEXT:\n{context_str[:2000]}\n\n"
-                    f"CLINICIAN QUERY: {clean_query}"
-                )
-
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.post(
-                        "https://api.openai.com/v1/chat/completions",
-                        headers={"Authorization": f"Bearer {openai_key}"},
-                        json={
-                            "model": "gpt-4o-mini",
-                            "messages": [
-                                {"role": "system", "content": system_prompt},
-                                {"role": "user", "content": user_prompt},
-                            ],
-                            "temperature": 0.2,
-                            "max_tokens": 500,
-                        },
-                    )
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        full_answer = data["choices"][0]["message"]["content"]
-                        _log.info("GPT_NANO.OPENAI_SUCCESS", model="gpt-4o-mini")
-            except Exception as exc:
-                _log.warning("GPT_NANO.OPENAI_EXCEPTION", error=str(exc))
+        # 1. Generate via Tiered Multi-Provider Client (Sarvam AI / GLM / OpenAI)
+        try:
+            system_prompt = (
+                "You are ClinIQ's Grounded Clinical Decision Support AI.\n"
+                "Your responses MUST be strictly grounded in the provided patient records and retrieved clinical context.\n"
+                "Be concise, evidence-based, professional, and clear. Cite specific lab values, document filenames, and vitals."
+            )
+            user_prompt = (
+                f"PATIENT CONTEXT:\n{patient_snapshot.patient_summary_text[:1500]}\n\n"
+                f"RETRIEVED CLINICAL CONTEXT:\n{context_str[:2000]}\n\n"
+                f"CLINICIAN QUERY: {clean_query}"
+            )
+            llm_client = GPT5NanoClient()
+            full_answer = await llm_client.generate_grounded_response(
+                system_prompt=system_prompt,
+                user_context_prompt=user_prompt,
+                max_tokens=1000,
+            )
+        except Exception as exc:
+            _log.warning("GPT_NANO.LLM_EXCEPTION", error=str(exc))
+            full_answer = None
 
         # 2. Structured Grounded Fallback Reasoning Engine
         if not full_answer:
