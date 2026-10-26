@@ -24,6 +24,7 @@ if str(backend_dir) not in sys.path:
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from sqlalchemy import delete, select
+from app.database.init_db import init_db
 from app.database.session import AsyncSessionLocal
 from app.modules.patients.model import Patient
 from app.modules.ingestion.model import Document, UploadJob, ProcessingLog
@@ -35,6 +36,7 @@ from app.modules.medicine_engine.prescription_model import Prescription, Prescri
 
 async def clear_demo_patients() -> None:
     """Find and purge all synthetic dataset records safely."""
+    await init_db()
     print("=== ClinIQ — Clearing Synthetic Dataset ===\n")
 
     async with AsyncSessionLocal() as session:

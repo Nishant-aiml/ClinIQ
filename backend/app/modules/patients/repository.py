@@ -15,10 +15,21 @@ from app.modules.ingestion.model import Document
 from app.modules.clinical_engine.model import ClinicalAlert
 
 
-def calculate_age(dob: date) -> int:
+def calculate_age(dob: date | str | None) -> int:
     """Calculate age from Date of Birth."""
+    if not dob:
+        return 0
+    if isinstance(dob, str):
+        try:
+            dob = date.fromisoformat(dob.split("T")[0])
+        except Exception:
+            return 0
     today = date.today()
-    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    try:
+        return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    except Exception:
+        return 0
+
 
 
 class PatientRepository:
@@ -197,9 +208,17 @@ class PatientRepository:
         new_this_month = 0
         for p in patients:
             if p.created_at:
-                c_at = p.created_at.replace(tzinfo=None)
-                if c_at >= start_of_month:
-                    new_this_month += 1
+                c_at = p.created_at
+                if isinstance(c_at, str):
+                    try:
+                        c_at = datetime.fromisoformat(c_at)
+                    except Exception:
+                        c_at = None
+                if c_at is not None:
+                    if hasattr(c_at, "tzinfo") and c_at.tzinfo is not None:
+                        c_at = c_at.replace(tzinfo=None)
+                    if c_at >= start_of_month:
+                        new_this_month += 1
 
         gender_dist = {"male": 0, "female": 0, "other": 0}
         blood_dist: dict[str, int] = {}

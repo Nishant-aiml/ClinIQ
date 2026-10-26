@@ -47,24 +47,29 @@ class QueryRouter:
     """Classifies clinician questions and assigns retrieval pathway."""
 
     @classmethod
-    def classify_query(cls, query_text: str) -> QueryIntent:
+    def classify_query(cls, query_text: str, explicit_patient_id: Optional[str] = None) -> QueryIntent:
         q_lower = query_text.strip().lower()
 
-        # 1. General Medical Knowledge queries (e.g. "What is metformin used for?", "what is the mechanism of metformin?")
-        general_med_match = re.search(
-            r"(?i)\b(what is\s+(the\s+)?(mechanism|use|indication|dosage|side effects?|contraindication)s?\s+of|"
-            r"what is\s+[a-z0-9-]+\s*(used for|indicated for|prescribed for|\?)?|"
-            r"explain\s+(the\s+)?(use|side effects?|mechanism|action)\s+of|"
-            r"mechanism\s+of\s+action\s+of|"
-            r"what are\s+(the\s+)?(symptoms|causes|treatments|side effects?)\s+of)\b",
-            query_text,
+        # If a patient is explicitly selected or mentioned, NEVER route to general knowledge
+        is_patient_context = (
+            bool(explicit_patient_id)
+            or bool(re.search(r"\bMRN-[A-Za-z0-9-]+\b", query_text, re.IGNORECASE))
+            or any(w in q_lower for w in ["patient", "priya", "arjun", "elena", "mehta", "sharma", "rostova", "her", "his", "their"])
         )
-        if general_med_match:
-            med_m = re.search(r"(?i)\b(metformin|paracetamol|dolo|amlodipine|atorvastatin|pantoprazole|aspirin|insulin|lisinopril|ibuprofen|amoxicillin|azithromycin|omeprazole)\b", query_text)
-            target_med = med_m.group(1) if med_m else None
-            # Only route to general medical knowledge if no specific patient identifier is in query
-            has_patient_id = bool(re.search(r"\bMRN-[A-Za-z0-9-]+\b", query_text, re.IGNORECASE))
-            if not has_patient_id:
+
+        # 1. General Medical Knowledge queries (e.g. "What is metformin used for?", "what is the mechanism of metformin?")
+        if not is_patient_context:
+            general_med_match = re.search(
+                r"(?i)\b(what is\s+(the\s+)?(mechanism|use|indication|dosage|side effects?|contraindication)s?\s+of|"
+                r"what is\s+[a-z0-9-]+\s*(used for|indicated for|prescribed for|\?)?|"
+                r"explain\s+(the\s+)?(use|side effects?|mechanism|action)\s+of|"
+                r"mechanism\s+of\s+action\s+of|"
+                r"what are\s+(the\s+)?(symptoms|causes|treatments|side effects?)\s+of)\b",
+                query_text,
+            )
+            if general_med_match:
+                med_m = re.search(r"(?i)\b(metformin|paracetamol|dolo|amlodipine|atorvastatin|pantoprazole|aspirin|insulin|lisinopril|ibuprofen|amoxicillin|azithromycin|omeprazole)\b", query_text)
+                target_med = med_m.group(1) if med_m else None
                 return QueryIntent(
                     intent_type="GENERAL_MEDICAL_INFORMATION",
                     retrieval_pathway="GENERAL",

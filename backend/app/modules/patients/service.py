@@ -78,6 +78,8 @@ class PatientService:
             archived_at=patient.archived_at,
             created_at=patient.created_at,
             updated_at=patient.updated_at,
+            last_document_at=getattr(patient, "last_document_at", None),
+            risk_status=getattr(patient, "risk_status", None),
         )
 
     async def create_patient(self, data: PatientCreate, clinician_id: str) -> PatientRead:

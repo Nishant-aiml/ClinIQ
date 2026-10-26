@@ -247,3 +247,33 @@ async def search_patients(
         request_id=_req_id(request),
     )
 
+
+@router.post(
+    "/seed-demo",
+    response_model=APIResponse[dict],
+    summary="Seed demo longitudinal patients for current clinician",
+)
+async def seed_demo_patients(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[dict]:
+    """Seed Arjun Mehta (Stable) and Priya Sharma (Progressive) longitudinal datasets."""
+    from scripts.seed_demo_patients import seed_demo_patients_for_clinician
+    from app.modules.auth.repository import AuthRepository
+    from app.core.exceptions import NotFoundError
+
+    auth_repo = AuthRepository(db)
+    user = await auth_repo.get_by_id(str(current_user["sub"]))
+    if not user:
+        raise NotFoundError("Clinician not found.")
+
+    patients = await seed_demo_patients_for_clinician(db, user)
+    return APIResponse(
+        success=True,
+        message=f"Successfully seeded {len(patients)} demo longitudinal patients.",
+        data={"patients_created": len(patients)},
+        request_id=_req_id(request),
+    )
+
+

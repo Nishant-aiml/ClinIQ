@@ -66,7 +66,7 @@ class AICopilotService:
             )
 
         # STAGE 2: Intent Classification & General Knowledge Routing
-        intent = QueryRouter.classify_query(clean_message)
+        intent = QueryRouter.classify_query(clean_message, explicit_patient_id=req.patient_id)
         if intent.is_general_info:
             return await self._handle_general_medical_info(clean_message, intent.target_medicine)
 

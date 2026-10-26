@@ -82,6 +82,12 @@ class AuthService:
             password_hash=get_password_hash(data.password),
         )
         _log.info("user_registered", user_id=user.id, email=user.email)
+        try:
+            from scripts.seed_demo_patients import seed_demo_patients_for_clinician
+            await seed_demo_patients_for_clinician(self._repo._session, user)
+        except Exception as e:
+            _log.warning("auto_seed_on_register_failed", error=str(e), user_id=user.id)
+
         return self._build_token_response(user)
 
     async def login(self, data: LoginRequest) -> TokenResponse:
@@ -104,6 +110,18 @@ class AuthService:
             raise UnauthorizedError("This account has been deactivated.")
 
         _log.info("user_login", user_id=user.id)
+        try:
+            from app.modules.patients.model import Patient
+            from sqlalchemy import select, func
+            count_stmt = select(func.count(Patient.id)).where(Patient.clinician_id == user.id)
+            res = await self._repo._session.execute(count_stmt)
+            p_count = res.scalar() or 0
+            if p_count == 0:
+                from scripts.seed_demo_patients import seed_demo_patients_for_clinician
+                await seed_demo_patients_for_clinician(self._repo._session, user)
+        except Exception as e:
+            _log.warning("auto_seed_on_login_failed", error=str(e), user_id=user.id)
+
         return self._build_token_response(user)
 
     async def get_me(self, user_id: str) -> UserRead:

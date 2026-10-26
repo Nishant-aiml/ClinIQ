@@ -34,6 +34,7 @@ if str(backend_dir) not in sys.path:
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from sqlalchemy import select
+from app.database.init_db import init_db
 from app.database.session import AsyncSessionLocal
 from app.core.security import get_password_hash
 from app.modules.auth.model import User
@@ -442,7 +443,23 @@ async def process_encounter_list(session, clinician_id: str, patient_id: str, en
     await session.flush()
 
 
+async def seed_demo_patients_for_clinician(session, clinician: User) -> list[Patient]:
+    """Seed Arjun Mehta (Stable) and Priya Sharma (Progressive) for a given clinician."""
+    pat_a = await seed_patient_a_stable(session, clinician)
+    pat_b = await seed_patient_b_progressive(session, clinician)
+    await session.commit()
+
+    clinical_svc = ClinicalService(session)
+    await clinical_svc.analyze_patient(pat_a.id, clinician.id)
+    await clinical_svc.analyze_patient(pat_b.id, clinician.id)
+    await session.commit()
+    return [pat_a, pat_b]
+
+
 async def main() -> None:
+    # Ensure database schema is created before seeding
+    await init_db()
+
     parser = argparse.ArgumentParser(description="ClinIQ Longitudinal Clinical Dataset Seeder")
     parser.add_argument("--reset", action="store_true", help="Clear existing synthetic dataset before seeding")
     args = parser.parse_args()
@@ -454,20 +471,10 @@ async def main() -> None:
 
     async with AsyncSessionLocal() as session:
         clinicians = await get_all_active_clinicians(session)
-        clinical_svc = ClinicalService(session)
 
         for c_idx, clinician in enumerate(clinicians, 1):
             print(f"\n--- [{c_idx}/{len(clinicians)}] Seeding for Clinician: {clinician.first_name} {clinician.last_name} ({clinician.email}) ---")
-
-            pat_a = await seed_patient_a_stable(session, clinician)
-            pat_b = await seed_patient_b_progressive(session, clinician)
-
-            await session.commit()
-
-            # Run Clinical Intelligence Analysis Engine
-            await clinical_svc.analyze_patient(pat_a.id, clinician.id)
-            await clinical_svc.analyze_patient(pat_b.id, clinician.id)
-            await session.commit()
+            await seed_demo_patients_for_clinician(session, clinician)
             print(f"  ✓ Arjun Mehta & Priya Sharma ready for clinician {clinician.email}")
 
     print("\n============================================================")

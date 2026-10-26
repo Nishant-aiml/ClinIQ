@@ -14,6 +14,7 @@ import {
   RotateCcw,
   AlertCircle,
   FolderOpen,
+  Sparkles,
 } from 'lucide-react';
 
 import PageLayout from '@/components/common/PageLayout';
@@ -52,6 +53,7 @@ export default function PatientsPage() {
   const [editingPatient, setEditingPatient] = useState<any | null>(null);
   const [archivingPatient, setArchivingPatient] = useState<IPatientListItem | null>(null);
   const [restoringPatient, setRestoringPatient] = useState<IPatientListItem | null>(null);
+  const [seeding, setSeeding] = useState(false);
 
   // Fetch data function
   const fetchPatients = useCallback(async () => {
@@ -118,18 +120,42 @@ export default function PatientsPage() {
     }
   };
 
+  const handleSeedDemo = async () => {
+    try {
+      setSeeding(true);
+      await patientsApi.seedDemo();
+      await fetchPatients();
+    } catch (err: any) {
+      console.error('Failed to seed demo patients:', err);
+      setError(err?.message || 'Failed to seed sample patients.');
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   return (
     <PageLayout
       title="Patient Records"
       description="Manage clinician patient records, search history, and clinical profiles."
       action={
-        <button
-          onClick={() => setIsCreateOpen(true)}
-          className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-sm"
-        >
-          <UserPlus className="h-4 w-4" />
-          <span>Register New Patient</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSeedDemo}
+            disabled={seeding}
+            className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3.5 py-2 rounded-lg font-medium text-sm transition-colors shadow-sm disabled:opacity-50"
+            title="Load Arjun Mehta (Stable) & Priya Sharma (Progressive) with 5-year records"
+          >
+            <Sparkles className="h-4 w-4 text-indigo-600" />
+            <span>{seeding ? 'Seeding Data...' : 'Load Sample Data'}</span>
+          </button>
+          <button
+            onClick={() => setIsCreateOpen(true)}
+            className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-sm"
+          >
+            <UserPlus className="h-4 w-4" />
+            <span>Register New Patient</span>
+          </button>
+        </div>
       }
     >
       <div className="space-y-6">
@@ -280,17 +306,27 @@ export default function PatientsPage() {
               description={
                 search
                   ? `No patient records match "${search}". Try adjusting your search or filters.`
-                  : 'Start by registering your first patient to begin managing clinical records.'
+                  : 'Start by registering your first patient or load realistic longitudinal demo datasets.'
               }
               action={
                 search ? undefined : (
-                  <button
-                    onClick={() => setIsCreateOpen(true)}
-                    className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    <span>Register First Patient</span>
-                  </button>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-2">
+                    <button
+                      onClick={handleSeedDemo}
+                      disabled={seeding}
+                      className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-50"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      <span>{seeding ? 'Loading Demo Data...' : 'Load Sample Clinical Patients'}</span>
+                    </button>
+                    <button
+                      onClick={() => setIsCreateOpen(true)}
+                      className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      <span>Register First Patient</span>
+                    </button>
+                  </div>
                 )
               }
             />

@@ -41,5 +41,9 @@ export const patientsApi = {
   search: async (q: string): Promise<ApiResponse<IPatientListItem[]>> => {
     return client.get('/patients/search/global', { params: { q } });
   },
+
+  seedDemo: async (): Promise<ApiResponse<{ patients_created: number }>> => {
+    return client.post('/patients/seed-demo');
+  },
 };
 

@@ -102,6 +102,8 @@ coverage/
 htmlcov/
 
 # ──────────────── MISC ────────────────
+storage/
+backend/storage/
 .temp/
 tmp/
 scratch/
