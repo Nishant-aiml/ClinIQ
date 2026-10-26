@@ -54,6 +54,7 @@ class StructuredRetriever:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._db = session
         self._clinical_service = ClinicalService(session)
         self._timeline_service = TimelineService(session)
         self._analytics_service = AnalyticsService(session)
@@ -195,7 +196,7 @@ class StructuredRetriever:
                     PrescriptionMedicine.clinician_id == clinician_id,
                 )
             )
-            res_med = await self._db.execute(stmt_med)
+            res_med = await self._session.execute(stmt_med)
             for med, rx in res_med.all():
                 m_name = med.medicine_name or ""
                 if not drug_name or drug_name.lower() in m_name.lower():
@@ -225,7 +226,7 @@ class StructuredRetriever:
                 )
                 .order_by(TimelineEvent.event_date.desc())
             )
-            res_tl = await self._db.execute(stmt_tl)
+            res_tl = await self._session.execute(stmt_tl)
             for ev in res_tl.scalars().all():
                 if ev.entities_json:
                     try:
