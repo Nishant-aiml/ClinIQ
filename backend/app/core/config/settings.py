@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from typing import List, Optional
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+BACKEND_DIR = Path(__file__).resolve().parents[3]
 
 class Settings(BaseSettings):
     """Main application settings."""

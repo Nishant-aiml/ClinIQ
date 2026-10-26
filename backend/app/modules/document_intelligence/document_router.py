@@ -19,6 +19,7 @@ from app.core.config.settings import get_settings
 from app.modules.document_intelligence.fallback.pymupdf_fallback import PyMuPDFFallback, HAS_PYMUPDF
 from app.modules.document_intelligence.parse.sarvam_parse import SarvamParseClient
 from app.modules.document_intelligence.vision.sarvam_vision import SarvamVisionClient, LocalVisionFallback
+from app.shared.utils.helpers import format_dt
 from app.observability.logger import get_logger
 
 _log = get_logger(__name__)
@@ -276,7 +277,7 @@ class DocumentRouter:
             file_type=file_type,
             source=source,
             category=category,
-            document_date=document_date.strftime("%Y-%m-%d"),
+            document_date=format_dt(document_date),
             processing_time_ms=elapsed_ms,
         )
 

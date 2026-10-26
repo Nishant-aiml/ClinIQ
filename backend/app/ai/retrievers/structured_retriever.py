@@ -24,6 +24,7 @@ from app.modules.clinical_engine.service import ClinicalService
 from app.modules.timeline.service import TimelineService
 from app.modules.analytics.service import AnalyticsService
 from app.observability.logger import get_logger
+from app.shared.utils.helpers import format_dt
 
 _log = get_logger(__name__)
 
@@ -75,7 +76,7 @@ class StructuredRetriever:
             sources.append({
                 "record_id": lab.id,
                 "title": f"Lab Result: {lab.test_name}",
-                "event_date": lab.tested_at.strftime("%Y-%m-%d") if lab.tested_at else "Recent",
+                "event_date": format_dt(lab.tested_at) if lab.tested_at else "Recent",
                 "document_type": "LAB",
             })
 
@@ -176,37 +177,95 @@ class StructuredRetriever:
     async def retrieve_medicine_history(
         self, patient_id: str, clinician_id: str, drug_name: Optional[str] = None
     ) -> StructuredEvidence:
-        """Fetch exact prescription history & frequency count from structured timeline events."""
-        visit_groups = await self._timeline_service.get_patient_timeline(patient_id, clinician_id)
+        """Fetch exact prescription history & frequency count from structured prescriptions and timeline events."""
+        import json
+        from app.modules.medicine_engine.prescription_model import PrescriptionMedicine, Prescription
+        from app.modules.timeline.model import TimelineEvent
         
         prescriptions = []
         sources = []
 
-        for vg in visit_groups:
-            for ev in vg.events:
-                # Inspect entities_json for parsed medicines
-                import json
-                try:
-                    entities = json.loads(ev.entities_json) if ev.entities_json else {}
-                    meds = entities.get("medicines", [])
-                    for m in meds:
-                        m_name = m.get("name", "")
-                        if not drug_name or drug_name.lower() in m_name.lower() or drug_name.lower() in m.get("raw_name", "").lower():
-                            prescriptions.append({
-                                "medicine_name": m_name,
-                                "raw_name": m.get("raw_name", ""),
-                                "frequency": m.get("frequency", "As Directed"),
-                                "event_date": ev.event_date.strftime("%Y-%m-%d"),
-                                "document_title": ev.title,
-                            })
-                            sources.append({
-                                "record_id": ev.id,
-                                "title": ev.title,
-                                "event_date": ev.event_date.strftime("%Y-%m-%d"),
-                                "document_type": "PRESCRIPTION",
-                            })
-                except Exception:
-                    pass
+        # 1. Query structured prescription medicines table
+        try:
+            stmt_med = (
+                select(PrescriptionMedicine, Prescription)
+                .join(Prescription, PrescriptionMedicine.prescription_id == Prescription.id)
+                .where(
+                    PrescriptionMedicine.patient_id == patient_id,
+                    PrescriptionMedicine.clinician_id == clinician_id,
+                )
+            )
+            res_med = await self._db.execute(stmt_med)
+            for med, rx in res_med.all():
+                m_name = med.medicine_name or ""
+                if not drug_name or drug_name.lower() in m_name.lower():
+                    prescriptions.append({
+                        "medicine_name": m_name,
+                        "dose": med.dose or med.strength or "",
+                        "frequency": med.frequency or "As directed",
+                        "event_date": format_dt(rx.prescription_date),
+                        "document_title": f"Prescription by {rx.prescribed_by or 'Doctor'}",
+                    })
+                    sources.append({
+                        "record_id": rx.id,
+                        "title": f"Prescription - {m_name}",
+                        "event_date": format_dt(rx.prescription_date),
+                        "document_type": "PRESCRIPTION",
+                    })
+        except Exception as e:
+            _log.warning("MEDICINE.PRESCRIPTION_TABLE_QUERY_FAILED", error=str(e))
+
+        # 2. Query timeline events
+        try:
+            stmt_tl = (
+                select(TimelineEvent)
+                .where(
+                    TimelineEvent.patient_id == patient_id,
+                    TimelineEvent.clinician_id == clinician_id,
+                )
+                .order_by(TimelineEvent.event_date.desc())
+            )
+            res_tl = await self._db.execute(stmt_tl)
+            for ev in res_tl.scalars().all():
+                if ev.entities_json:
+                    try:
+                        entities = json.loads(ev.entities_json)
+                        meds = entities.get("medicines", [])
+                        for m in meds:
+                            m_name = m.get("name", "")
+                            if not drug_name or drug_name.lower() in m_name.lower() or drug_name.lower() in m.get("raw_name", "").lower():
+                                prescriptions.append({
+                                    "medicine_name": m_name,
+                                    "dose": m.get("dosage", ""),
+                                    "frequency": m.get("frequency", "As Directed"),
+                                    "event_date": format_dt(ev.event_date),
+                                    "document_title": ev.title,
+                                })
+                                sources.append({
+                                    "record_id": ev.id,
+                                    "title": ev.title,
+                                    "event_date": format_dt(ev.event_date),
+                                    "document_type": "PRESCRIPTION",
+                                })
+                    except Exception:
+                        pass
+                elif "prescription" in (ev.event_type or "").lower() or "rx" in (ev.title or "").lower():
+                    if not drug_name or drug_name.lower() in (ev.summary or "").lower() or drug_name.lower() in ev.title.lower():
+                        prescriptions.append({
+                            "medicine_name": drug_name.title() if drug_name else ev.title,
+                            "dose": "",
+                            "frequency": "Mentioned in encounter",
+                            "event_date": format_dt(ev.event_date),
+                            "document_title": ev.title,
+                        })
+                        sources.append({
+                            "record_id": ev.id,
+                            "title": ev.title,
+                            "event_date": format_dt(ev.event_date),
+                            "document_type": "PRESCRIPTION",
+                        })
+        except Exception as e:
+            _log.warning("MEDICINE.TIMELINE_QUERY_FAILED", error=str(e))
 
         count = len(prescriptions)
         if count == 0:

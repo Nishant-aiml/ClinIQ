@@ -79,7 +79,7 @@ export default function AssistantPage() {
 
       setChatHistory((prev) => [...prev, newItem]);
     } catch (err: any) {
-      setError(err?.message || 'AI Copilot request failed because the OpenAI API key is missing or unconfigured.');
+      setError(err?.message || 'AI Copilot request failed. Please check your network connection or backend service status.');
     } finally {
       setSendingQuery(false);
     }

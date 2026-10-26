@@ -28,10 +28,14 @@ class AmbiguousCandidate(BaseModel):
 
 
 class AICopilotChatRequest(BaseModel):
-    """Request payload for POST /api/v1/ai-copilot/chat."""
-    message: str = Field(..., min_length=2, max_length=2000, description="Clinician query message")
+    """Request payload for POST /api/v1/ai-copilot/chat and /query."""
+    message: Optional[str] = Field(None, min_length=1, max_length=4000, description="Clinician query message")
+    query: Optional[str] = Field(None, min_length=1, max_length=4000, description="Alias for message")
     patient_id: Optional[str] = Field(None, description="Optional patient UUID when in patient-scoped mode")
     conversation_id: Optional[str] = Field(None, description="Optional conversation context ID")
+
+    def get_message(self) -> str:
+        return (self.message or self.query or "").strip()
 
 
 class RAGAuditTrace(BaseModel):

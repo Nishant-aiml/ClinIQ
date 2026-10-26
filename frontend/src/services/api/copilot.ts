@@ -1,6 +1,5 @@
 import apiClient from './client';
 import { API_ENDPOINTS } from './endpoints';
-import { ApiResponse } from '@/types/api';
 
 export interface ISourceAttribution {
   record_id: string;
@@ -48,11 +47,13 @@ export interface IAICopilotChatResponse {
 
 export const copilotApi = {
   chat: async (req: IAICopilotChatRequest): Promise<IAICopilotChatResponse> => {
-    // apiClient interceptor already unwraps AxiosResponse.data -> res is ApiResponse<IAICopilotChatResponse>
-    const res = await apiClient.post<ApiResponse<IAICopilotChatResponse>>(
-      API_ENDPOINTS.AI_COPILOT.CHAT,
-      req
-    );
-    return (res as unknown as ApiResponse<IAICopilotChatResponse>).data;
+    const res: any = await apiClient.post(API_ENDPOINTS.AI_COPILOT.CHAT, req);
+    if (res?.data?.answer !== undefined) {
+      return res.data;
+    }
+    if (res?.answer !== undefined) {
+      return res;
+    }
+    return res?.data || res;
   },
 };

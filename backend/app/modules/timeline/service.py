@@ -25,6 +25,7 @@ from app.modules.timeline.schema import (
     TimelineStatsRead,
     VisitGroupRead,
 )
+from app.shared.utils.helpers import format_dt, parse_dt
 from app.observability.logger import get_logger
 
 _log = get_logger(__name__)
@@ -174,8 +175,8 @@ class TimelineService:
 
         return TimelineStatsRead(
             total_events=len(events),
-            first_record=events[0].event_date.strftime("%d %b %Y") if events else None,
-            latest_record=events[-1].event_date.strftime("%d %b %Y") if events else None,
+            first_record=format_dt(events[0].event_date, fmt="%d %b %Y") if events else None,
+            latest_record=format_dt(events[-1].event_date, fmt="%d %b %Y") if events else None,
             lab_count=lab_count,
             vitals_count=vitals_count,
             prescription_count=rx_count,
@@ -306,8 +307,8 @@ class TimelineService:
         if not observations and summary_is_garbage:
             return ClinicalEncounterRead(
                 id=ev.id,
-                event_date=ev.event_date,
-                display_date=ev.event_date.strftime("%d %b %Y"),
+                event_date=parse_dt(ev.event_date) if isinstance(ev.event_date, str) else ev.event_date,
+                display_date=format_dt(ev.event_date, fmt="%d %b %Y"),
                 event_type=ev.event_type or "lab_report",
                 document_type=ev.document_type or "DOCUMENT",
                 title=_clean_title(ev.title),
@@ -334,8 +335,8 @@ class TimelineService:
 
         return ClinicalEncounterRead(
             id=ev.id,
-            event_date=ev.event_date,
-            display_date=ev.event_date.strftime("%d %b %Y"),
+            event_date=parse_dt(ev.event_date) if isinstance(ev.event_date, str) else ev.event_date,
+            display_date=format_dt(ev.event_date, fmt="%d %b %Y"),
             event_type=ev.event_type or "lab_report",
             document_type=ev.document_type or "DOCUMENT",
             title=_clean_title(ev.title),
@@ -354,7 +355,7 @@ class TimelineService:
         """Group encounters by calendar date (YYYY-MM-DD) and return sorted groups."""
         groups: Dict[str, List[ClinicalEncounterRead]] = defaultdict(list)
         for enc in encounters:
-            date_key = enc.event_date.strftime("%Y-%m-%d") if enc.event_date else "Unknown"
+            date_key = format_dt(enc.event_date, fmt="%Y-%m-%d") if enc.event_date else "Unknown"
             groups[date_key].append(enc)
 
         visit_groups = []
@@ -362,10 +363,10 @@ class TimelineService:
             enc_list = groups[d_str]
             # Parse display date
             try:
-                dt = datetime.strptime(d_str, "%Y-%m-%d")
+                dt = parse_dt(d_str)
                 disp = dt.strftime("%d %b %Y")
                 day_label = dt.strftime("%A, %d %B %Y")
-            except ValueError:
+            except Exception:
                 disp = d_str
                 day_label = d_str
 

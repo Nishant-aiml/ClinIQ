@@ -18,6 +18,10 @@ Stages:
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+import json
+import uuid
+import hashlib
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.llm.openai_client import GPT5NanoClient
@@ -27,6 +31,7 @@ from app.ai.guardrails.safety_firewall import SafetyFirewall
 from app.ai.copilot.patient_resolver import PatientResolver
 from app.ai.copilot.query_router import QueryRouter
 from app.ai.copilot.context_builder import ContextBuilder
+from app.modules.ai_copilot.model import AIChatLog
 
 from app.modules.ai_copilot.schema import (
     AICopilotChatRequest,
@@ -35,6 +40,7 @@ from app.modules.ai_copilot.schema import (
     RAGAuditTrace,
     SourceAttribution,
 )
+from app.shared.utils.helpers import format_dt
 from app.observability.logger import get_logger
 
 _log = get_logger(__name__)
@@ -56,7 +62,13 @@ class AICopilotService:
         """Execute full 12-stage RAG pipeline and return grounded response."""
         
         # STAGE 1: Input Normalization & Input Guard
-        clean_message = req.message.strip()
+        clean_message = req.get_message()
+        if not clean_message:
+            return AICopilotChatResponse(
+                success=False,
+                answer="Clinical query cannot be empty.",
+                confidence="INSUFFICIENT",
+            )
         input_guard_res = SafetyFirewall.validate_input(clean_message)
         if not input_guard_res.passed:
             return AICopilotChatResponse(
@@ -83,7 +95,7 @@ class AICopilotService:
                     id=c.id,
                     mrn=c.mrn,
                     name=f"{c.first_name} {c.last_name}",
-                    date_of_birth=c.date_of_birth.strftime("%Y-%m-%d"),
+                    date_of_birth=format_dt(c.date_of_birth),
                     gender=c.gender,
                 )
                 for c in resolution.candidates
@@ -238,6 +250,24 @@ class AICopilotService:
             confidence=confidence_level,
         )
 
+        # Persist audit chat log
+        try:
+            sources_data = [s.model_dump() for s in unique_sources.values()]
+            chat_log = AIChatLog(
+                id=str(uuid.uuid4()),
+                clinician_id=clinician_id,
+                patient_id=patient.id,
+                query=clean_message,
+                answer=final_answer,
+                confidence_score=0.95 if confidence_level == "HIGH" else 0.75 if confidence_level == "MEDIUM" else 0.5,
+                sources_json=json.dumps(sources_data),
+                audit_hash=hashlib.sha256(f"{clean_message}:{final_answer}".encode("utf-8")).hexdigest(),
+            )
+            self._session.add(chat_log)
+            await self._session.commit()
+        except Exception as log_ex:
+            _log.warning("CHAT_LOG_PERSIST.FAILED", error=str(log_ex))
+
         return AICopilotChatResponse(
             success=True,
             answer=final_answer,
@@ -248,6 +278,39 @@ class AICopilotService:
             sources=list(unique_sources.values()),
             audit_trace=audit_trace,
         )
+
+    async def get_patient_chat_history(
+        self, patient_id: str, clinician_id: str
+    ) -> List[Dict[str, Any]]:
+        """Retrieve historical clinical copilot Q&A interactions for patient."""
+        stmt = (
+            select(AIChatLog)
+            .where(
+                AIChatLog.patient_id == patient_id,
+                AIChatLog.clinician_id == clinician_id,
+            )
+            .order_by(AIChatLog.created_at.desc())
+            .limit(50)
+        )
+        res = await self._session.execute(stmt)
+        logs = res.scalars().all()
+        history = []
+        for l in logs:
+            try:
+                sources = json.loads(l.sources_json)
+            except Exception:
+                sources = []
+            history.append({
+                "id": l.id,
+                "patient_id": l.patient_id,
+                "query": l.query,
+                "answer": l.answer,
+                "confidence_score": l.confidence_score,
+                "sources": sources,
+                "audit_hash": l.audit_hash,
+                "created_at": l.created_at.isoformat() if l.created_at else None,
+            })
+        return history
 
     async def _execute_structured_retrieval(
         self, patient_id: str, clinician_id: str, intent: QueryRouter.QueryIntent

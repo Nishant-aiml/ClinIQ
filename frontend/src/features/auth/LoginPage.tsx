@@ -71,6 +71,53 @@ export default function LoginPage() {
         >
           {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sign in'}
         </button>
+
+        {/* Demo Fast Login Pills */}
+        <div className="pt-4 border-t border-slate-100">
+          <p className="text-xs text-center text-slate-500 font-medium mb-2">Quick Demo Access (One-Click):</p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                setEmail('consultant@cliniq.med');
+                setPassword('ClinicianPassword123!');
+                setIsLoading(true);
+                setError(null);
+                try {
+                  await login({ email: 'consultant@cliniq.med', password: 'ClinicianPassword123!' });
+                  navigate(ROUTES.DASHBOARD);
+                } catch (err: any) {
+                  setError(err?.message || 'Login failed.');
+                } finally {
+                  setIsLoading(false);
+                }
+              }}
+              className="flex-1 py-1.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-xs font-semibold text-slate-700 text-center transition-colors"
+            >
+              Demo Consultant (5-Yr Trajectory)
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                setEmail('admin1@example.com');
+                setPassword('password123');
+                setIsLoading(true);
+                setError(null);
+                try {
+                  await login({ email: 'admin1@example.com', password: 'password123' });
+                  navigate(ROUTES.DASHBOARD);
+                } catch (err: any) {
+                  setError(err?.message || 'Login failed.');
+                } finally {
+                  setIsLoading(false);
+                }
+              }}
+              className="flex-1 py-1.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-xs font-semibold text-slate-700 text-center transition-colors"
+            >
+              Admin Clinician
+            </button>
+          </div>
+        </div>
       </form>
 
       <p className="mt-6 text-center text-sm text-slate-600">

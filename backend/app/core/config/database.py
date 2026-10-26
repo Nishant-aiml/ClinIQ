@@ -13,7 +13,7 @@ def get_database_url() -> str:
         sub = url.replace("sqlite+aiosqlite:///", "")
         if sub.startswith("./"):
             sub = sub[2:]
-        backend_dir = Path(__file__).resolve().parent.parent.parent
+        backend_dir = Path(__file__).resolve().parents[3]
         db_path = (backend_dir / sub).resolve()
         return f"sqlite+aiosqlite:///{db_path.as_posix()}"
     return url

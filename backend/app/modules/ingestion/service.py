@@ -397,6 +397,17 @@ class IngestionService:
             failed=failed_cnt,
         )
 
+        # Auto-trigger clinical intelligence analysis so organ scores and labs update immediately
+        if completed_cnt > 0:
+            try:
+                from app.modules.clinical_engine.service import ClinicalService
+                clinical_svc = ClinicalService(self._session)
+                await clinical_svc.analyze_patient(patient_id, clinician_id)
+                await self._session.commit()
+                _log.info("AUTO_ANALYZE.COMPLETED", patient_id=patient_id)
+            except Exception as e_a:
+                _log.warning("AUTO_ANALYZE.FAILED", error=str(e_a), patient_id=patient_id)
+
         avg_confidence = (
             sum(d.confidence_score for d in processed_docs if d.status == "completed") / max(1, completed_cnt)
             if completed_cnt > 0

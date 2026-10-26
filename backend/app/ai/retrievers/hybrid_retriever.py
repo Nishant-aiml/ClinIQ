@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.ingestion.model import Document
 from app.observability.logger import get_logger
+from app.shared.utils.helpers import format_dt
 
 _log = get_logger(__name__)
 
@@ -93,7 +94,7 @@ class UnstructuredHybridRetriever:
                 paras = [text.strip()]
 
             for idx, p in enumerate(paras):
-                c_date = d.document_date.strftime("%Y-%m-%d") if d.document_date else d.created_at.strftime("%Y-%m-%d")
+                c_date = format_dt(d.document_date or d.created_at)
                 chunks.append(
                     DocumentChunk(
                         chunk_id=f"{d.id}_chunk_{idx}",

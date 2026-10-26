@@ -18,15 +18,19 @@ import {
   CheckCircle2,
   AlertCircle,
   Stethoscope,
-
+  Send,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 
 import PageLayout from '@/components/common/PageLayout';
 import Loader from '@/components/common/Loader';
 import EmptyState from '@/components/common/EmptyState';
+import { useGlobalContext } from '@/contexts/GlobalContext';
 import { patientsApi } from '@/services/api/patients';
 import { ingestionApi } from '@/services/api/ingestion';
 import { clinicalApi } from '@/services/api/clinical';
+import { copilotApi } from '@/services/api/copilot';
 import { IPatient } from '@/types/patients';
 import { IDocumentListItem, IBatchUploadSummary } from '@/types/ingestion';
 import { IClinicalOverview } from '@/types/clinical';
@@ -79,6 +83,38 @@ export default function PatientDetailPage() {
   const [isRestoreOpen, setIsRestoreOpen] = useState(false);
   const [viewingDocId, setViewingDocId] = useState<string | null>(null);
   const [timelineDoc, setTimelineDoc] = useState<{ id: string; name: string } | null>(null);
+
+  // AI Copilot state
+  const { openCopilot } = useGlobalContext();
+  const [copilotQuery, setCopilotQuery] = useState('');
+  const [copilotLoading, setCopilotLoading] = useState(false);
+  const [copilotMessages, setCopilotMessages] = useState<Array<{ sender: 'user' | 'assistant'; text: string; confidence?: string }>>([]);
+
+  const handleSendCopilotQuery = async (customQuery?: string) => {
+    const q = (customQuery || copilotQuery).trim();
+    if (!q || copilotLoading || !patient) return;
+    if (!customQuery) setCopilotQuery('');
+    setCopilotLoading(true);
+    setCopilotMessages(prev => [...prev, { sender: 'user', text: q }]);
+    try {
+      const res = await copilotApi.chat({
+        message: q,
+        patient_id: patient.id,
+      });
+      setCopilotMessages(prev => [...prev, { sender: 'assistant', text: res.answer, confidence: res.confidence }]);
+    } catch (err: any) {
+      setCopilotMessages(prev => [
+        ...prev,
+        {
+          sender: 'assistant',
+          text: err?.message || 'Failed to get Copilot response. Please verify backend connection.',
+          confidence: 'INSUFFICIENT',
+        },
+      ]);
+    } finally {
+      setCopilotLoading(false);
+    }
+  };
 
   const fetchPatient = async () => {
     if (!id) return;
@@ -702,22 +738,113 @@ export default function PatientDetailPage() {
         )}
 
         {activeTab === 'copilot' && (
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4 pb-3 border-b">
-              <Bot className="h-5 w-5 text-blue-600" />
-              <h3 className="font-bold text-slate-900">ClinIQ AI Copilot — Patient Context: {patient.first_name} {patient.last_name} ({patient.mrn})</h3>
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b bg-slate-50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
+                  <Bot className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    ClinIQ AI Copilot — {patient.first_name} {patient.last_name} ({patient.mrn})
+                  </h3>
+                  <p className="text-xs text-slate-500">12-Stage Grounded RAG with 8-Organ Clinical Intelligence</p>
+                </div>
+              </div>
+              <button
+                onClick={() => openCopilot(patient.id, `${patient.first_name} ${patient.last_name}`)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+                title="Pop out to side drawer"
+              >
+                <span>Slide-over Drawer</span>
+                <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+              </button>
             </div>
-            <p className="text-xs text-slate-500 mb-4">Ask grounded clinical questions or request patient summaries. OpenAI GPT-5 Nano with 12-stage RAG pipeline active.</p>
-            <button
-              onClick={() => {
-                const btn = document.querySelector('button:has(svg.lucide-bot)') as HTMLButtonElement;
-                if (btn) btn.click();
-              }}
-              className="px-4 py-2 bg-blue-600 text-white font-medium text-sm rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2"
-            >
-              <Bot className="h-4 w-4" />
-              Open Interactive Copilot Drawer for {patient.first_name}
-            </button>
+
+            {/* Chat Messages */}
+            <div className="flex-1 p-5 overflow-y-auto space-y-4 max-h-[500px] bg-slate-50/40">
+              {copilotMessages.length === 0 ? (
+                <div className="py-8 text-center space-y-4 max-w-lg mx-auto">
+                  <div className="h-12 w-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                    <Bot className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-900 text-sm">Ask anything about {patient.first_name}'s clinical records</h4>
+                    <p className="text-xs text-slate-500 mt-1">Queries are evaluated with patient longitudinal evidence, organ scores, and active alerts.</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 pt-2 text-left">
+                    {[
+                      `What is the renal trajectory and diabetic status of ${patient.first_name}?`,
+                      `How many times was metformin or other medications prescribed?`,
+                      `What were the latest vitals and blood pressure readings?`,
+                      `Summarize active clinical alerts and organ scores for this patient.`,
+                    ].map((prompt, pIdx) => (
+                      <button
+                        key={pIdx}
+                        onClick={() => handleSendCopilotQuery(prompt)}
+                        className="p-2.5 bg-white hover:bg-blue-50/60 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 transition-colors flex items-center justify-between shadow-2xs group"
+                      >
+                        <span>{prompt}</span>
+                        <Sparkles className="h-3 w-3 text-blue-500 opacity-60 group-hover:opacity-100 shrink-0 ml-2" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                copilotMessages.map((msg, mIdx) => (
+                  <div
+                    key={mIdx}
+                    className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-2xl rounded-2xl p-4 text-sm ${
+                        msg.sender === 'user'
+                          ? 'bg-primary text-white rounded-tr-none font-medium'
+                          : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm whitespace-pre-line'
+                      }`}
+                    >
+                      {msg.sender === 'assistant' && msg.confidence && (
+                        <div className="mb-2 pb-2 border-b border-slate-100 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          <span>{msg.confidence} Confidence Evidence</span>
+                        </div>
+                      )}
+                      {msg.text}
+                    </div>
+                  </div>
+                ))
+              )}
+              {copilotLoading && (
+                <div className="flex items-center gap-2 p-3 bg-white rounded-xl border border-slate-200 text-xs text-slate-500 w-fit">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span>Analyzing clinical evidence and formulating grounded response...</span>
+                </div>
+              )}
+            </div>
+
+            {/* Input Bar */}
+            <div className="p-4 border-t bg-white flex items-center gap-2">
+              <input
+                type="text"
+                value={copilotQuery}
+                onChange={(e) => setCopilotQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSendCopilotQuery();
+                }}
+                disabled={copilotLoading}
+                placeholder={`Ask a question about ${patient.first_name} ${patient.last_name}...`}
+                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+              <button
+                onClick={() => handleSendCopilotQuery()}
+                disabled={copilotLoading || !copilotQuery.trim()}
+                className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 shadow-sm"
+              >
+                <Send className="h-4 w-4" />
+                <span>Send</span>
+              </button>
+            </div>
           </div>
         )}
 

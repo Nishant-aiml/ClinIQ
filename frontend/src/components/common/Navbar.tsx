@@ -2,16 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Bell, Search, User, Bot, Sparkles, UserCheck, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useGlobalContext } from '@/contexts/GlobalContext';
 import { patientsApi } from '@/services/api/patients';
 import { IPatientListItem } from '@/types/patients';
 import { AICopilotDrawer } from '@/features/assistant/AICopilotDrawer';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
+  const { isCopilotOpen, setIsCopilotOpen, activePatientId: contextPatientId, activePatientName } = useGlobalContext();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<IPatientListItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -21,7 +22,8 @@ export default function Navbar() {
 
   // Extract patient ID from route URL if currently on /patients/:id
   const patientMatch = location.pathname.match(/\/patients\/([a-zA-Z0-9-]+)/);
-  const activePatientId = patientMatch && patientMatch[1] !== 'new' ? patientMatch[1] : null;
+  const routePatientId = patientMatch && patientMatch[1] !== 'new' ? patientMatch[1] : null;
+  const effectivePatientId = routePatientId || contextPatientId;
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -156,7 +158,8 @@ export default function Navbar() {
       <AICopilotDrawer
         isOpen={isCopilotOpen}
         onClose={() => setIsCopilotOpen(false)}
-        activePatientId={activePatientId}
+        activePatientId={effectivePatientId}
+        activePatientName={activePatientName}
       />
     </>
   );

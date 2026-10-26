@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, List, Optional, Sequence
 from app.modules.analytics.model import ParameterHistory
+from app.shared.utils.helpers import format_dt, parse_dt
 from app.observability.logger import get_logger
 
 _log = get_logger(__name__)
@@ -101,12 +102,12 @@ class TrendEngine:
             )
 
         # Sort chronologically by event_date
-        sorted_items = sorted(items, key=lambda x: x.event_date)
+        sorted_items = sorted(items, key=lambda x: parse_dt(x.event_date))
         obs_count = len(sorted_items)
 
         points = [
             {
-                "date": item.event_date.strftime("%Y-%m-%d") if item.event_date else "",
+                "date": format_dt(item.event_date),
                 "value": item.value,
                 "unit": item.unit,
                 "status": item.status,
@@ -120,7 +121,7 @@ class TrendEngine:
 
         latest_item = sorted_items[-1]
         latest_val = latest_item.value
-        latest_dt_str = latest_item.event_date.strftime("%Y-%m-%d") if latest_item.event_date else ""
+        latest_dt_str = format_dt(latest_item.event_date)
 
         first_item = sorted_items[0]
         first_val = first_item.value
@@ -144,7 +145,9 @@ class TrendEngine:
             )
 
         # Calculate time span, absolute shift & percentage change
-        days_span = max(1, (latest_item.event_date - first_item.event_date).days)
+        latest_dt = parse_dt(latest_item.event_date)
+        first_dt = parse_dt(first_item.event_date)
+        days_span = max(1, (latest_dt - first_dt).days)
         abs_change = round(latest_val - first_val, 2)
         pct_change = round((abs_change / max(0.001, abs(first_val))) * 100.0, 1)
         rate_per_day = round(abs_change / float(days_span), 3)

@@ -21,6 +21,7 @@ from app.modules.patients.model import Patient
 from app.modules.ingestion.model import Document
 from app.modules.clinical_engine.model import ClinicalAlert
 from app.observability.logger import get_logger
+from app.shared.utils.helpers import format_dt
 
 _log = get_logger(__name__)
 
@@ -102,7 +103,7 @@ class PatientContextBuilder:
                 "filename": d.original_filename,
                 "category": d.doc_category,
                 "parse_source": d.parse_source,
-                "created_at": d.created_at.strftime("%Y-%m-%d %H:%M") if d.created_at else "",
+                "created_at": format_dt(d.created_at, "%Y-%m-%d %H:%M") if d.created_at else "",
                 "snippet": (d.extracted_text or "")[:400],
                 "full_text": d.extracted_text or "",
             })

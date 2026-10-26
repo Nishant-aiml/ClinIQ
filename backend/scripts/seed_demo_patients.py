@@ -104,6 +104,11 @@ def create_physical_doc_file(clinician_id: str, patient_id: str, doc_id: str, fi
 async def seed_patient_a_stable(session, clinician: User) -> Patient:
     """Seed Patient A — Arjun Mehta (Stable / Healthy Longitudinal Trajectory 2021-2026)."""
     mrn = f"MRN-2026-000101-{clinician.id[:4].upper()}"
+    while True:
+        check = await session.execute(select(Patient.id).where(Patient.mrn == mrn))
+        if not check.scalar_one_or_none():
+            break
+        mrn = f"MRN-2026-A{uuid.uuid4().hex[:6].upper()}"
 
     patient = Patient(
         id=str(uuid.uuid4()),
@@ -178,6 +183,11 @@ async def seed_patient_a_stable(session, clinician: User) -> Patient:
 async def seed_patient_b_progressive(session, clinician: User) -> Patient:
     """Seed Patient B — Priya Sharma (Progressive / High-Risk Longitudinal Trajectory 2021-2026)."""
     mrn = f"MRN-2026-000201-{clinician.id[:4].upper()}"
+    while True:
+        check = await session.execute(select(Patient.id).where(Patient.mrn == mrn))
+        if not check.scalar_one_or_none():
+            break
+        mrn = f"MRN-2026-B{uuid.uuid4().hex[:6].upper()}"
 
     patient = Patient(
         id=str(uuid.uuid4()),
@@ -444,16 +454,38 @@ async def process_encounter_list(session, clinician_id: str, patient_id: str, en
 
 
 async def seed_demo_patients_for_clinician(session, clinician: User) -> list[Patient]:
-    """Seed Arjun Mehta (Stable) and Priya Sharma (Progressive) for a given clinician."""
-    pat_a = await seed_patient_a_stable(session, clinician)
-    pat_b = await seed_patient_b_progressive(session, clinician)
-    await session.commit()
+    """Seed Arjun Mehta (Stable) and Priya Sharma (Progressive) for a given clinician if not already present."""
+    stmt = select(Patient).where(Patient.clinician_id == clinician.id)
+    res = await session.execute(stmt)
+    existing = list(res.scalars().all())
 
+    has_arjun = any(p.first_name == "Arjun" and p.last_name == "Mehta" for p in existing)
+    has_priya = any(p.first_name == "Priya" and p.last_name == "Sharma" for p in existing)
+
+    seeded = []
     clinical_svc = ClinicalService(session)
-    await clinical_svc.analyze_patient(pat_a.id, clinician.id)
-    await clinical_svc.analyze_patient(pat_b.id, clinician.id)
-    await session.commit()
-    return [pat_a, pat_b]
+
+    if not has_arjun:
+        pat_a = await seed_patient_a_stable(session, clinician)
+        await session.commit()
+        await clinical_svc.analyze_patient(pat_a.id, clinician.id)
+        await session.commit()
+        seeded.append(pat_a)
+    else:
+        arjun = next(p for p in existing if p.first_name == "Arjun" and p.last_name == "Mehta")
+        seeded.append(arjun)
+
+    if not has_priya:
+        pat_b = await seed_patient_b_progressive(session, clinician)
+        await session.commit()
+        await clinical_svc.analyze_patient(pat_b.id, clinician.id)
+        await session.commit()
+        seeded.append(pat_b)
+    else:
+        priya = next(p for p in existing if p.first_name == "Priya" and p.last_name == "Sharma")
+        seeded.append(priya)
+
+    return seeded
 
 
 async def main() -> None:

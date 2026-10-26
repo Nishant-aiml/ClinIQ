@@ -6,7 +6,7 @@ Endpoints:
 """
 from __future__ import annotations
 
-from typing import Dict, Any
+from typing import Dict, Any, List
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,12 @@ router = APIRouter(prefix="/ai-copilot", tags=["AI Copilot"])
     status_code=status.HTTP_200_OK,
     summary="Ask ClinIQ AI Copilot a grounded clinical question",
 )
+@router.post(
+    "/query",
+    response_model=APIResponse[AICopilotChatResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Query ClinIQ AI Copilot (alias endpoint)",
+)
 async def chat_with_copilot(
     req: AICopilotChatRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
@@ -37,3 +43,20 @@ async def chat_with_copilot(
     service = AICopilotService(db)
     res = await service.process_chat_message(req=req, clinician_id=clinician_id)
     return APIResponse(data=res)
+
+
+@router.get(
+    "/patients/{patient_id}/history",
+    response_model=APIResponse[List[Dict[str, Any]]],
+    summary="Get patient chat history",
+)
+async def get_patient_history(
+    patient_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[List[Dict[str, Any]]]:
+    """Retrieve historical copilot questions and answers for a specific patient."""
+    clinician_id = str(current_user.get("sub") or current_user.get("id"))
+    service = AICopilotService(db)
+    history = await service.get_patient_chat_history(patient_id, clinician_id)
+    return APIResponse(data=history)
